@@ -3,7 +3,7 @@ Generates new firmware for M-Duino 19+ to simplify coding for a less code-aware 
 
 This code is a bit messy at the moment.
 
-Tthe next tehe first 40 lines set up the libraries needed and initialise the main variables (pressures and temperatures). Lines 30 to 40 declare the 7 main functions.  The first is to collect the pressure and temperature data from the sensors using modbus.  The remaining 6 are the functions that take action -- 3 for each side (west and east): switching the pump (on or off using Modbus) and controlling the 4 mains-operated motorised valves using the Mduiuno's relays.
+The first 40 lines set up the libraries needed and initialise the main variables (pressures and temperatures). Lines 30 to 40 declare the 7 main functions.  The first is to collect the pressure and temperature data from the sensors using modbus.  The remaining 6 are the functions that take action -- 3 for each side (west and east): switching the pump (on or off using Modbus) and controlling the 4 mains-operated motorised valves using the M-Duino's relays.
 
 The next ten or so lines are the void setup() function and initialise th eoperation of the serial port and the Modbus function.
 
