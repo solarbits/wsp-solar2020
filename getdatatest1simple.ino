@@ -1,6 +1,6 @@
 /*
-this is to prototype the GET_DATA function
- */
+  this is to prototype the GET_DATA function
+*/
 
 #include <ModbusRTUMaster.h>
 
@@ -21,8 +21,8 @@ bool modbus21Needed = false;
 bool dunnit = false;
 const uint32_t baudrate = 9600UL;
 
-  // set up key parameters
-  // pressure in mb, temp in decidegrees (0.1 degsC)
+// set up key parameters
+// pressure in mb, temp in decidegrees (0.1 degsC)
 int linePress = 76;
 int poolTemp = 0;
 int westPanelTemp = 0;
@@ -38,41 +38,41 @@ void setup() {
   Serial.begin(9600UL);
   RS485.begin(baudrate, HALFDUPLEX, SERIAL_8N1);
   master.begin(baudrate);
-  
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop() {
-delay(10);
- GET_DATA(33); 
-delay(10);
- GET_DATA(23);
+  delay(100);
+  GET_DATA(33);
+  delay(100);
+  GET_DATA(23);
 
-if (checkResponseGateOpen){
+  if (checkResponseGateOpen) {
 
-  // Check available responses often
-  if (master.isWaitingResponse()) {
-    ModbusResponse response = master.available();
-    if (response) {
-      if (response.hasError()) {
-        // Response failure treatment. You can use 
-        Serial.println(response.getErrorCode());
-        // to get the error code.
-      } else {
-        // Get the coil value from the response
-        int coil = response.getRegister(0);
-        Serial.print("Coil : ");
-        Serial.print(dev);
-       Serial.println(coil);
-        // close this check loop
-        checkResponseGateOpen = false;
-        // and open the path for next user...
-        requestGateOpen = true;
-        
+    // Check available responses often
+    if (master.isWaitingResponse()) {
+      ModbusResponse response = master.available();
+      if (response) {
+        if (response.hasError()) {
+          // Response failure treatment. You can use
+          Serial.println(response.getErrorCode());
+          // to get the error code.
+        } else {
+          // Get the coil value from the response
+          int coil = response.getRegister(0);
+          Serial.print("Coil : ");
+          Serial.print(dev);
+          Serial.println(coil);
+          // close this check loop
+          checkResponseGateOpen = false;
+          // and open the path for next user...
+          requestGateOpen = true;
+
+        }
       }
     }
   }
-}
 }
 
 
@@ -81,15 +81,16 @@ if (checkResponseGateOpen){
 // . HERE IS THE EXAMPLE FUNCTION GET_DATA
 
 /////////////////////////////////////////////////////////////////////////////
-  int GET_DATA( int dev) {
+int GET_DATA( int dev) {
 
- 
-// do the modbus request, prevent further requests and allow checks to be made
-if (requestGateOpen) {requestGateOpen = false; checkResponseGateOpen = true;
+
+  // do the modbus request, prevent further requests and allow checks to be made
+  if (requestGateOpen) {
+    requestGateOpen = false; checkResponseGateOpen = true;
     if (!master.readInputRegisters(dev, 1, 1)) {
-      //Error treatment 
+      //Error treatment
       Serial.println("trouble with reading");
-    }   
-}
+    }
+  }
 }
 //////////////////////////////////////////////////////////////////////////////////////
