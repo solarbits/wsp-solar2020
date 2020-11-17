@@ -10,6 +10,13 @@
 #define ADDR_TEMP_WEST 33
 #define ADDR_TEMP_EAST 23
 
+#define ADDR_PUMP_WEST 2
+#define ADDR_PUMP_EAST 2
+
+// Device states
+#define DRIVE_PUMP_ON 1
+#define DRIVE_PUMP_OFF 0
+
 const int numberOfSensors = 2; // Update this if you add another one below
 const int addresses[] = {ADDR_TEMP_WEST, ADDR_TEMP_EAST};
 // Current device being read (index in the above array)
@@ -62,8 +69,32 @@ void loop() {
     Serial.print(" [East]: ");
     Serial.println(tempEast);
 
+    // Using the saved values, decide what to do
+    decisionTree();
+
     lastPrintedTime = millis();
   }
+}
+
+// Replace this bit with the decision tree
+void decisionTree() {
+  if (tempWest > tempEast) {
+    headPoolFromWest();
+  } else {
+    coolPanelWest();
+  }
+}
+
+void headPoolFromWest() {
+  Serial.println("Heat pool from west");
+  drivePumpFor(ADDR_PUMP_WEST, DRIVE_PUMP_ON);
+  // ... Relays etc
+}
+
+void coolPanelWest() {
+  Serial.println("Cool panel west");
+  drivePumpFor(ADDR_PUMP_WEST, DRIVE_PUMP_OFF);
+  // ... Relays etc
 }
 
 void requestNextData() {
@@ -80,7 +111,6 @@ void requestNextData() {
   } else {
     deviceIndex = deviceIndex + 1;
   }
-
 }
 
 // Request data infrequently
@@ -91,6 +121,14 @@ void requestDataFrom(int deviceAddress) {
 
   if (!master.readInputRegisters(deviceAddress, 1, 1)) {
     Serial.print("Trouble requesting data from device: addr-");
+    Serial.println(deviceAddress);
+  }
+}
+
+// Set power state for a pump by address
+void drivePumpFor(int deviceAddress, int value) {
+  if (!master.writeSingleRegister(deviceAddress, 0, value)) {
+    Serial.print("Trouble sending power command to device: addr-");
     Serial.println(deviceAddress);
   }
 }
