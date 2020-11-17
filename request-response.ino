@@ -10,11 +10,15 @@
 #define ADDR_TEMP_WEST 33
 #define ADDR_TEMP_EAST 23
 
+const int numberOfSensors = 2; // Update this if you add another one below
+const int addresses[] = {ADDR_TEMP_WEST, ADDR_TEMP_EAST};
+// Current device being read (index in the above array)
+int deviceIndex = 0;
+
 ModbusRTUMaster master(RS485);
 
 // Timestamps to throttle infrequent operations
-uint32_t lastSentTimea = 0UL;
-uint32_t lastSentTimeb = 0UL;
+uint32_t lastSentTime = 0UL;
 uint32_t lastPrintedTime = 0UL;
 
 // Config
@@ -35,24 +39,13 @@ void loop() {
   // Check that its been a second since last request for data
   // This is like delay(1000) but doesn't block the loop
   // The loop should keep looping incase a response comes along
-  if (millis() - lastSentTimea > 1000) {
-    
-    // Infrequently request data
-    requestDataFrom(ADDR_TEMP_WEST);
-    // TODO we could loop through an array of addresses to request for,
-    // calling one each time lastSentTime is elapsed
-    
-    lastSentTimea = millis();
-  }
+  if (millis() - lastSentTime > 1000) {
 
-  if (millis() - lastSentTimeb> 1000) {
-    
     // Infrequently request data
-    requestDataFrom(ADDR_TEMP_EAST);
-    // TODO we could loop through an array of addresses to request for,
-    // calling one each time lastSentTime is elapsed
-    
-    lastSentTimeb = millis();
+    // Each time this is called, it will move to the next address in the addresses array
+    requestNextData();
+
+    lastSentTime = millis();
   }
 
   // Check to see if a response is waiting every loop
@@ -63,7 +56,7 @@ void loop() {
   // This will be what is the state of the saved vars on which we decide whether to run
   // the pumps or not. This happens every 10 seconds
   if (millis() - lastPrintedTime > 10000) {
-    
+
     Serial.print("Saved values: [West]: ");
     Serial.print(tempWest);
     Serial.print(" [East]: ");
@@ -71,6 +64,23 @@ void loop() {
 
     lastPrintedTime = millis();
   }
+}
+
+void requestNextData() {
+  // Look up the Modbus address for this index
+  int deviceAddress = addresses[deviceIndex];
+
+  // Send request to the sensor
+  requestDataFrom(deviceAddress);
+
+  // Increment the device index, to lookup the next sensor address next time
+  // Or go back to the start
+  if (deviceIndex == numberOfSensors -1) {
+    deviceIndex = 0;
+  } else {
+    deviceIndex = deviceIndex + 1;
+  }
+
 }
 
 // Request data infrequently
@@ -102,11 +112,11 @@ void listenForResponse () {
         Serial.print(deviceAddress);
         Serial.print(" Error code: ");
         Serial.println(response.getErrorCode());
-        
+
       } else {
         // Get the coil value from the response
         int reading = response.getRegister(0);
-        
+
         // So now we have the reading, and the address that it came from
         // so it can be dealt with, eg. Save it into the right variable
         handleResponseData(deviceAddress, reading);
