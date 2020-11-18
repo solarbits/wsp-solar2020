@@ -20,24 +20,28 @@
 #define ADDR_PRES_SYST      64
 
 #define ADDR_PUMP_WEST 2
-#define ADDR_PUMP_EAST 1 //CHANGE THIS TO 1 LATER
+#define ADDR_PUMP_EAST 2 //CHANGE THIS TO 1 LATER
+#define INDEX_PUMP_WEST 0
+#define INDEX_PUMP_EAST 1
 
 // Device states
 #define DRIVE_PUMP_ON 1
 #define DRIVE_PUMP_OFF 0
 
-const int numberOfSensors = 2; // Update this if you add another one below
-const int addresses[] = {ADDR_TEMP_WEST, ADDR_TEMP_EAST};
+const int numberOfSensors = 3; // Update this if you add another one below
+const int sensorAddresses[] = {ADDR_TEMP_WEST, ADDR_TEMP_EAST, ADDR_TEMP_WEST};
+const int numberOfPumps = 2;
+const int pumpAddresses[] = {ADDR_PUMP_WEST, ADDR_PUMP_EAST};
+
 // Current device being read (index in the above array)
-int deviceIndex = 0;
+int sensorIndex = 0;
+int pumpIndex = 0;
 
 ModbusRTUMaster master(RS485);
 
 // Timestamps to throttle infrequent operations
 uint32_t lastSentTime = 0UL;
 uint32_t lastPrintedTime = 0UL;
-uint32_t lastDecisionWestTime = 0UL;
-uint32_t lastDecisionEastTime = 0UL;
 
 // Config
 const uint32_t BAUDRATE = 9600UL;
@@ -53,12 +57,16 @@ int westPumpPressure;
 int eastPumpPressure;
 int systemPressure;
 
+// pump state
+int pumpStates[] = {DRIVE_PUMP_OFF, DRIVE_PUMP_OFF};
+
 // define limiting parameters here
 
-int maxPoolTemp = 300; // 30degC
-int maxPanelTemp = 600; //(60degC)
-int minSystemPressure = 35; // (35mb)
+const int maxPoolTemp = 300; // 30degC
+const int maxPanelTemp = 600; //(60degC)
+const int minSystemPressure = 35; // (35mb)
 
+int isReadingSensors = 1;
 
 // ... and others
 
@@ -72,11 +80,19 @@ void loop() {
   // Check that its been a second since last request for data
   // This is like delay(1000) but doesn't block the loop
   // The loop should keep looping incase a response comes along
-  if (millis() - lastSentTime > 1000) {
+  if (millis() - lastSentTime > 50) {
 
     // Infrequently request data
     // Each time this is called, it will move to the next address in the addresses array
-    requestNextData();
+    if (isReadingSensors) {
+      if (requestNextData()) {
+        isReadingSensors = 0;
+      }
+    } else {
+      if (requestNextCommand()) {
+        isReadingSensors = 1;
+      }
+    }
 
     lastSentTime = millis();
   }
@@ -115,150 +131,175 @@ void decisionTree() {
 
   //do the west side first and chip in to do the actions every so often
 
-  if (millis() - lastDecisionWestTime > 1000) {
 
-    if (systemPressure < minSystemPressure) {
+  if (systemPressure < minSystemPressure) {
 
-      // the line pressure is too low: switch the pumps off
-      switchWestOff();
+    // the line pressure is too low: switch the pumps off
+    switchWestOff();
 
-    } else {
+  } else {
 
-      // the line pressure is ok, carry on :-)
-      if (poolTemp > maxPoolTemp) {
+    // the line pressure is ok, carry on :-)
+    if (poolTemp > maxPoolTemp) {
 
-        //  Pool is hot enough, check whether west panel is getting too hot
-        if (westPanelTemp > maxPanelTemp) {
+      //  Pool is hot enough, check whether west panel is getting too hot
+      if (westPanelTemp > maxPanelTemp) {
 
-          // Whoops, west panel is getting too hot: cool the roof
-          coolWestRoof();
-
-        } else {
-
-          // No, the panel is cool enough, stop pumping water through it to waste
-          switchWestOff();
-        }
+        // Whoops, west panel is getting too hot: cool the roof
+        coolWestRoof();
 
       } else {
 
-        // No the pool isn't too hot, is the west panel hotter than the pool?
-        if (westPanelTemp > poolTemp) {
-
-          // Yes, its hotter than the pool and the pool needs the heat
-          heatPoolFromWest();
-
-        } else {
-
-          // No, the west panel is too cold
-          switchWestOff();
-        }
-
+        // No, the panel is cool enough, stop pumping water through it to waste
+        switchWestOff();
       }
+
+    } else {
+
+      // No the pool isn't too hot, is the west panel hotter than the pool?
+      if (westPanelTemp > poolTemp) {
+
+        // Yes, its hotter than the pool and the pool needs the heat
+        heatPoolFromWest();
+
+      } else {
+
+        // No, the west panel is too cold
+        switchWestOff();
+      }
+
     }
-    lastDecisionWestTime = millis();
   }
+
+
+
 
   // that deals with the west side, now look at east. Repeat the checks every so often...
 
-  if (millis() - lastDecisionEastTime > 1090) {
-
-    if (systemPressure < minSystemPressure) {
-
-      // the line pressure is too low: switch the pumps off
-      switchEastOff();
-
-    } else {
-
-      // the line pressure is ok, carry on :-)
 
 
-      if (poolTemp > maxPoolTemp) {
+  if (systemPressure < minSystemPressure) {
 
-        //  Pool is hot enough, check whether east panel is getting too hot
-        if (eastPanelTemp > maxPanelTemp) {
+    // the line pressure is too low: switch the pumps off
+    switchEastOff();
 
-          // Whoops, east panel is getting too hot, cool the roof
-          coolEastRoof();
+  } else {
 
-        } else {
+    // the line pressure is ok, carry on :-)
 
-          // No, the panel is cool enough, stop pumping water through it to waste
-          switchEastOff();
-        }
+
+    if (poolTemp > maxPoolTemp) {
+
+      //  Pool is hot enough, check whether east panel is getting too hot
+      if (eastPanelTemp > maxPanelTemp) {
+
+        // Whoops, east panel is getting too hot, cool the roof
+        coolEastRoof();
 
       } else {
 
-        // No the pool isn't too hot, is the east panel hotter than the pool?
-        if (eastPanelTemp > poolTemp) {
+        // No, the panel is cool enough, stop pumping water through it to waste
+        switchEastOff();
+      }
 
-          // Yes, it's hotter than the pool and the pool needs the heat
-          heatPoolFromEast();
+    } else {
 
-        } else {
+      // No the pool isn't too hot, is the east panel hotter than the pool?
+      if (eastPanelTemp > poolTemp) {
 
-          // No, the panel is too cold so switch it off
-          switchEastOff();
-        }
+        // Yes, it's hotter than the pool and the pool needs the heat
+        heatPoolFromEast();
 
+      } else {
+
+        // No, the panel is too cold so switch it off
+        switchEastOff();
       }
 
     }
-    lastDecisionEastTime = millis();
+
   }
+
+
 }
-  void switchWestOff() {
-    Serial.println("Switch west off");
-    drivePumpFor(ADDR_PUMP_WEST, DRIVE_PUMP_OFF);
-    // ... Relays etc
-  }
-  void switchEastOff() {
-    Serial.println("Switch east off");
-    drivePumpFor(ADDR_PUMP_EAST, DRIVE_PUMP_OFF);
-    // ... Relays etc
-  }
-  void coolWestRoof() {
-    Serial.println("Cool panel west");
-    drivePumpFor(ADDR_PUMP_WEST, DRIVE_PUMP_ON);
-    // ... Relays etc
-  }
-  void coolEastRoof() {
-    Serial.println("Cool panel east");
-    drivePumpFor(ADDR_PUMP_EAST, DRIVE_PUMP_ON);
-    // ... Relays etc
 
-  }
-  void heatPoolFromWest() {
-    Serial.println("Heat pool from west");
-    drivePumpFor(ADDR_PUMP_WEST, DRIVE_PUMP_ON);
-    // ... Relays etc
-  }
-  void heatPoolFromEast() {
-    Serial.println("Heat pool from east");
-    drivePumpFor(ADDR_PUMP_EAST, DRIVE_PUMP_ON);
-    // ... Relays etc
-  }
 
-void requestNextData() {
+void switchWestOff() {
+  Serial.println("Switch west off");
+  pumpStates[INDEX_PUMP_WEST] = DRIVE_PUMP_OFF;
+  // ... Relays etc
+}
+void switchEastOff() {
+  Serial.println("Switch east off");
+  pumpStates[INDEX_PUMP_EAST] = DRIVE_PUMP_OFF;
+  // ... Relays etc
+}
+void coolWestRoof() {
+  Serial.println("Cool panel west");
+  pumpStates[INDEX_PUMP_WEST] = DRIVE_PUMP_ON;
+  // ... Relays etc
+}
+void coolEastRoof() {
+  Serial.println("Cool panel east");
+  pumpStates[INDEX_PUMP_EAST] = DRIVE_PUMP_ON;
+  // ... Relays etc
+
+}
+void heatPoolFromWest() {
+  Serial.println("Heat pool from west");
+  pumpStates[INDEX_PUMP_WEST] = DRIVE_PUMP_ON;
+  // ... Relays etc
+}
+void heatPoolFromEast() {
+  Serial.println("Heat pool from east");
+  pumpStates[INDEX_PUMP_EAST] = DRIVE_PUMP_ON;
+  // ... Relays etc
+}
+
+int requestNextData() {
   // Look up the Modbus address for this index
-  int deviceAddress = addresses[deviceIndex];
+  int deviceAddress = sensorAddresses[sensorIndex];
 
   // Send request to the sensor
   requestDataFrom(deviceAddress);
 
   // Increment the device index, to lookup the next sensor address next time
   // Or go back to the start
-  if (deviceIndex == numberOfSensors - 1) {
-    deviceIndex = 0;
+  if (sensorIndex == numberOfSensors - 1) {
+    sensorIndex = 0;
+    return 1;
   } else {
-    deviceIndex = deviceIndex + 1;
+    sensorIndex = sensorIndex + 1;
+    return 0;
   }
 }
 
+int requestNextCommand() {
+  // Look up the Modbus address for this index
+  int deviceAddress = pumpAddresses[pumpIndex];
+  int state = pumpStates[pumpIndex];
+
+  // Send command to the pump
+  //   Serial.print("Sending command to addr-");
+  //   Serial.println(deviceAddress);
+  drivePumpFor(deviceAddress, state);
+
+  // Increment the device index, to lookup the next sensor address next time
+  // Or go back to the start
+  if (pumpIndex == numberOfPumps - 1) {
+    pumpIndex = 0;
+    return 1;
+  } else {
+    pumpIndex = pumpIndex + 1;
+    return 0;
+  }
+
+}
 // Request data infrequently
 // passing the address of the device to send the request to
 void requestDataFrom(int deviceAddress) {
-  Serial.print("Requesting data from: addr-");
-  Serial.println(deviceAddress);
+  //  Serial.print("Requesting data from: addr-");
+  //  Serial.println(deviceAddress);
 
   if (!master.readInputRegisters(deviceAddress, 1, 1)) {
     Serial.print("Trouble requesting data from device: addr-");
