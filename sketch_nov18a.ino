@@ -44,8 +44,8 @@
 #define DRIVE_PUMP_ON 1
 #define DRIVE_PUMP_OFF 0
 
-const int numberOfSensors = 3; // Update this if you add another one below
-const int sensorAddresses[] = {ADDR_TEMP_WEST, ADDR_TEMP_EAST, ADDR_TEMP_WEST};
+const int numberOfSensors = 2; // Update this if you add another one below
+const int sensorAddresses[] = {ADDR_TEMP_WEST, ADDR_TEMP_EAST};
 const int numberOfPumps = 2;
 const int pumpAddresses[] = {ADDR_PUMP_WEST, ADDR_PUMP_EAST};
 
@@ -58,6 +58,11 @@ int pumpStates[] = {DRIVE_PUMP_OFF, DRIVE_PUMP_OFF};
 // Written into by recieving responses from MB sensors
 int sensorReadings[8] = {};
 
+// Modbus modes, when all addresses from each mode have been read or written, then move onto the next mode
+#define MODBUS_REQUEST_READ 1
+#define MODBUS_REQUEST_WRITE 0
+int modbusRequestMode = MODBUS_REQUEST_READ;
+
 ModbusRTUMaster master(RS485);
 
 // Timestamps to throttle infrequent operations
@@ -67,26 +72,10 @@ uint32_t lastPrintedTime = 0UL;
 // Config
 const uint32_t BAUDRATE = 9600UL;
 
-// Save readings globally here
-int westPanelTemp;
-int eastPanelTemp;
-int westPanelPipeTemp;
-int eastPanelPipeTemp;
-int poolTemp;
-int airTemp;
-int westPumpPressure;
-int eastPumpPressure;
-int systemPressure;
-
 // define limiting parameters here
-
 const int maxPoolTemp = 300; // 30degC
 const int maxPanelTemp = 600; //(60degC)
 const int minSystemPressure = 35; // (35mb)
-
-#define MODBUS_REQUEST_READ 1
-#define MODBUS_REQUEST_WRITE 0
-int modbusRequestMode = MODBUS_REQUEST_READ;
 
 void setup() {
   Serial.begin(BAUDRATE);
@@ -123,19 +112,24 @@ void loop() {
   // the pumps or not. This happens every 10 seconds
   if (millis() - lastPrintedTime > 10000) {
 
-    Serial.print("Saved values: [West]: ");
-    Serial.print(westPanelTemp);
-    Serial.print(" [East]: ");
-    Serial.println(eastPanelTemp);
+    Serial.print("Saved values: ");
+    for (int i = 0; i < numberOfSensors; i++) {
+      Serial.print(sensorReadings[i]);
+      Serial.print(", ");
+    }
+    Serial.println();
 
     // Using the saved values, decide what to do
+    // and set new pump states based on temperature comparisons
     decisionTree();
 
     lastPrintedTime = millis();
   }
 }
 
-// Replace this bit with the decision tree
+// Using the saved values, decide what to do
+// and set new pump states and set relays
+// based on temperature comparisons
 void decisionTree() {
   // once we've got data check:
   // the line pressure is ok,
@@ -353,7 +347,7 @@ void listenForResponse () {
         #endif
 
       } else {
-        // Get the coil value from the response
+        // Get the value from the response
         int reading = response.getRegister(0);
 
         // So now we have the reading, and the address that it came from
