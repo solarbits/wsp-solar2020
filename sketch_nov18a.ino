@@ -7,6 +7,10 @@
 #include <ModbusRTUMaster.h>
 #include <RS485.h>
 
+// #define DEBUG_REQUESTS 1 // Uncomment to enable
+#define DEBUG_RESPONSES 1 // Comment to disable
+#define DEBUG_ERRORS 1 // Comment to disable
+
 // Device addresses, (for example)
 #define ADDR_TEMP_WEST      23
 #define ADDR_TEMP_WEST_PIPE 24
@@ -19,8 +23,20 @@
 #define ADDR_PRES_EAST      37
 #define ADDR_PRES_SYST      64
 
+// Indexes to look these up in the state array
+#define INDEX_TEMP_WEST 0
+#define INDEX_TEMP_WEST_PIPE 1
+#define INDEX_TEMP_EAST 2
+#define INDEX_TEMP_EAST_PIPE 3
+#define INDEX_TEMP_POOL 4
+#define INDEX_TEMP_AIR 5
+#define INDEX_PRESS_WEST 6
+#define INDEX_PRESS_EAST 7
+#define INDEX_PRESS_SYSTEM 8
+
 #define ADDR_PUMP_WEST 2
 #define ADDR_PUMP_EAST 2 //CHANGE THIS TO 1 LATER
+// Indexes to look these up in the state array
 #define INDEX_PUMP_WEST 0
 #define INDEX_PUMP_EAST 1
 
@@ -36,6 +52,11 @@ const int pumpAddresses[] = {ADDR_PUMP_WEST, ADDR_PUMP_EAST};
 // Current device being read (index in the above array)
 int sensorIndex = 0;
 int pumpIndex = 0;
+
+// Written into here by decision tree, then looked up by index sequentially by the modbus send loop
+int pumpStates[] = {DRIVE_PUMP_OFF, DRIVE_PUMP_OFF};
+// Written into by recieving responses from MB sensors
+int sensorReadings[8] = {};
 
 ModbusRTUMaster master(RS485);
 
@@ -57,18 +78,15 @@ int westPumpPressure;
 int eastPumpPressure;
 int systemPressure;
 
-// pump state
-int pumpStates[] = {DRIVE_PUMP_OFF, DRIVE_PUMP_OFF};
-
 // define limiting parameters here
 
 const int maxPoolTemp = 300; // 30degC
 const int maxPanelTemp = 600; //(60degC)
 const int minSystemPressure = 35; // (35mb)
 
-int isReadingSensors = 1;
-
-// ... and others
+#define MODBUS_REQUEST_READ 1
+#define MODBUS_REQUEST_WRITE 0
+int modbusRequestMode = MODBUS_REQUEST_READ;
 
 void setup() {
   Serial.begin(BAUDRATE);
@@ -83,15 +101,14 @@ void loop() {
   if (millis() - lastSentTime > 50) {
 
     // Infrequently request data
-    // Each time this is called, it will move to the next address in the addresses array
-    if (isReadingSensors) {
-      if (requestNextData()) {
-        isReadingSensors = 0;
-      }
-    } else {
-      if (requestNextCommand()) {
-        isReadingSensors = 1;
-      }
+    // Each time these request functions are called, it will move to the next address in the addresses array until switching mode when the array is complete
+    switch modbusRequestMode {
+      case MODBUS_REQUEST_READ:
+        requestNextRead()
+        break;
+      case MODBUS_REQUEST_WRITE:
+        requestNextWrite()
+        break;
     }
 
     lastSentTime = millis();
@@ -122,52 +139,52 @@ void loop() {
 void decisionTree() {
   // once we've got data check:
   // the line pressure is ok,
-  // then whether the pool is too hot
+  // Turn off the pumps and bail out if not
+
+  // Otherwise check
+  // whether the pool is too hot
   // then whether the west panel is too hot
   // then whether the west panel is hot enough to heat the pool
   // then again whether the panel is too hot
   // then whether the east panel is too hot
   // then whether the east panel is hot enough to heat the pool
 
-  //do the west side first and chip in to do the actions every so often
-
-
-  if (systemPressure < minSystemPressure) {
+  if (sensorReadings[INDEX_PRESS_SYSTEM] < minSystemPressure) {
 
     // the line pressure is too low: switch the pumps off
     switchWestOff();
+    switchEastOff();
+    return;
+  }
 
-  } else {
+  // the line pressure is ok, carry on :-)
 
-    // the line pressure is ok, carry on :-)
-    if (poolTemp > maxPoolTemp) {
+  if (sensorReadings[INDEX_TEMP_POOL] > maxPoolTemp) {
 
-      //  Pool is hot enough, check whether west panel is getting too hot
-      if (westPanelTemp > maxPanelTemp) {
+    //  Pool is hot enough, check whether west panel is getting too hot
+    if (sensorReadings[INDEX_TEMP_WEST_PIPE] > maxPanelTemp) {
 
-        // Whoops, west panel is getting too hot: cool the roof
-        coolWestRoof();
-
-      } else {
-
-        // No, the panel is cool enough, stop pumping water through it to waste
-        switchWestOff();
-      }
+      // Whoops, west panel is getting too hot: cool the roof
+      coolWestRoof();
 
     } else {
 
-      // No the pool isn't too hot, is the west panel hotter than the pool?
-      if (westPanelTemp > poolTemp) {
+      // No, the panel is cool enough, stop pumping water through it to waste
+      switchWestOff();
+    }
 
-        // Yes, its hotter than the pool and the pool needs the heat
-        heatPoolFromWest();
+  } else {
 
-      } else {
+    // No the pool isn't too hot, is the west panel hotter than the pool?
+    if (sensorReadings[INDEX_TEMP_WEST_PIPE] > poolTemp) {
 
-        // No, the west panel is too cold
-        switchWestOff();
-      }
+      // Yes, its hotter than the pool and the pool needs the heat
+      heatPoolFromWest();
 
+    } else {
+
+      // No, the west panel is too cold
+      switchWestOff();
     }
   }
 
@@ -176,53 +193,35 @@ void decisionTree() {
 
   // that deals with the west side, now look at east. Repeat the checks every so often...
 
+  if (sensorReadings[INDEX_TEMP_POOL] > maxPoolTemp) {
 
+    //  Pool is hot enough, check whether east panel is getting too hot
+    if (sensorReadings[INDEX_TEMP_EAST_PIPE] > maxPanelTemp) {
 
-  if (systemPressure < minSystemPressure) {
-
-    // the line pressure is too low: switch the pumps off
-    switchEastOff();
-
-  } else {
-
-    // the line pressure is ok, carry on :-)
-
-
-    if (poolTemp > maxPoolTemp) {
-
-      //  Pool is hot enough, check whether east panel is getting too hot
-      if (eastPanelTemp > maxPanelTemp) {
-
-        // Whoops, east panel is getting too hot, cool the roof
-        coolEastRoof();
-
-      } else {
-
-        // No, the panel is cool enough, stop pumping water through it to waste
-        switchEastOff();
-      }
+      // Whoops, east panel is getting too hot, cool the roof
+      coolEastRoof();
 
     } else {
 
-      // No the pool isn't too hot, is the east panel hotter than the pool?
-      if (eastPanelTemp > poolTemp) {
-
-        // Yes, it's hotter than the pool and the pool needs the heat
-        heatPoolFromEast();
-
-      } else {
-
-        // No, the panel is too cold so switch it off
-        switchEastOff();
-      }
-
+      // No, the panel is cool enough, stop pumping water through it to waste
+      switchEastOff();
     }
 
+  } else {
+
+    // No the pool isn't too hot, is the east panel hotter than the pool?
+    if (sensorReadings[INDEX_TEMP_EAST_PIPE] > poolTemp) {
+
+      // Yes, it's hotter than the pool and the pool needs the heat
+      heatPoolFromEast();
+
+    } else {
+
+      // No, the panel is too cold so switch it off
+      switchEastOff();
+    }
   }
-
-
 }
-
 
 void switchWestOff() {
   Serial.println("Switch west off");
@@ -256,62 +255,80 @@ void heatPoolFromEast() {
   // ... Relays etc
 }
 
-int requestNextData() {
+// Send requests to the sensors one by one
+// until they're all done, then switch the mode to write to send commands to the pumps
+void requestNextRead() {
   // Look up the Modbus address for this index
   int deviceAddress = sensorAddresses[sensorIndex];
 
-  // Send request to the sensor
-  requestDataFrom(deviceAddress);
+  // Send a read register command to the sensor
+  requestReadFrom(deviceAddress);
 
   // Increment the device index, to lookup the next sensor address next time
   // Or go back to the start
   if (sensorIndex == numberOfSensors - 1) {
+    // Reset sensor index for next loop
     sensorIndex = 0;
-    return 1;
+
+    // Switch mode to do the writes now
+    modbusRequestMode = MODBUS_REQUEST_WRITE;
   } else {
+    // Increment index to read the next sensor
     sensorIndex = sensorIndex + 1;
-    return 0;
   }
 }
 
-int requestNextCommand() {
+// Send any write messages from the pumpStates array
+// until they're all done, then switch the mode back to read
+void requestNextWrite() {
   // Look up the Modbus address for this index
   int deviceAddress = pumpAddresses[pumpIndex];
   int state = pumpStates[pumpIndex];
 
-  // Send command to the pump
-  //   Serial.print("Sending command to addr-");
-  //   Serial.println(deviceAddress);
-  drivePumpFor(deviceAddress, state);
+  // Send a write register command to the pump
+  requestWriteFor(deviceAddress, state);
 
   // Increment the device index, to lookup the next sensor address next time
   // Or go back to the start
   if (pumpIndex == numberOfPumps - 1) {
+    // Reset pump index for next loop
     pumpIndex = 0;
-    return 1;
-  } else {
-    pumpIndex = pumpIndex + 1;
-    return 0;
-  }
 
+    // Switch mode to do the reads again now
+    modbusRequestMode = MODBUS_REQUEST_READ;
+  } else {
+    // Increment index to write to the next pump
+    pumpIndex = pumpIndex + 1;
+  }
 }
-// Request data infrequently
-// passing the address of the device to send the request to
-void requestDataFrom(int deviceAddress) {
-  //  Serial.print("Requesting data from: addr-");
-  //  Serial.println(deviceAddress);
+
+// Request a read from one of the Modbus sensors
+void requestReadFrom(int deviceAddress) {
+  #ifdef DEBUG_REQUESTS
+    Serial.print("READ from: addr-");
+    Serial.println(deviceAddress);
+  #endif
 
   if (!master.readInputRegisters(deviceAddress, 1, 1)) {
-    Serial.print("Trouble requesting data from device: addr-");
-    Serial.println(deviceAddress);
+    #ifdef DEBUG_ERRORS
+      Serial.print("Trouble requesting data from device: addr-");
+      Serial.println(deviceAddress);
+    #endif
   }
 }
 
 // Set power state for a pump by address
-void drivePumpFor(int deviceAddress, int value) {
-  if (!master.writeSingleRegister(deviceAddress, 0, value)) {
-    Serial.print("Trouble sending power command to device: addr-");
+void requestWriteFor(int deviceAddress, int value) {
+  #ifdef DEBUG_REQUESTS
+    Serial.print("WRITE to: addr-");
     Serial.println(deviceAddress);
+  #endif
+
+  if (!master.writeSingleRegister(deviceAddress, 0, value)) {
+    #ifdef DEBUG_ERRORS
+      Serial.print("Trouble sending power command to device: addr-");
+      Serial.println(deviceAddress);
+    #endif
   }
 }
 
@@ -327,11 +344,13 @@ void listenForResponse () {
       int deviceAddress = response.getSlave();
 
       if (response.hasError()) {
-        // Debug message about the error
-        Serial.print("Error response from device: addr-");
-        Serial.print(deviceAddress);
-        Serial.print(" Error code: ");
-        Serial.println(response.getErrorCode());
+        #ifdef DEBUG_ERRORS
+          // Debug message about the error
+          Serial.print("Error response from device: addr-");
+          Serial.print(deviceAddress);
+          Serial.print(" Error code: ");
+          Serial.println(response.getErrorCode());
+        #endif
 
       } else {
         // Get the coil value from the response
@@ -348,19 +367,22 @@ void listenForResponse () {
 // Response packet comes back with the address and the reading.
 // This function will print it for debugging, and saves it to the tempEast and tempWest vars
 void handleResponseData (int deviceAddress, int reading) {
-  Serial.print("Response from: addr-");
-  Serial.print(deviceAddress);
+  #ifdef DEBUG_RESPONSES
+    Serial.print("Response from: addr-");
+    Serial.print(deviceAddress);
+    Serial.print(" Value: ");
+    Serial.println(reading);
+  #endif
 
-  Serial.print(" Reading: ");
-  Serial.println(reading);
-
-  // Set the global var from the reading, based on the address that it came from
-  switch (deviceAddress) {
-    case ADDR_TEMP_WEST: westPanelTemp = reading;
+  // We need to put the value in the sensorReadings array
+  // To find the index in the array for this device address, loop through the addresses by index
+  // and set the reading with the same index when the address matches
+  for (int i = 0; i < numberOfSensors; i++) {
+    if (sensorAddresses[i] == deviceAddress) {
+      sensorReadings[i] = reading;
       break;
-    case ADDR_TEMP_EAST: eastPanelTemp = reading;
-      break;
-    default:
-      break;
+    }
   }
+
+  // Not bothered about response from pumps unless printing them above in debug mode
 }
