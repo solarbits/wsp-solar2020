@@ -29,9 +29,9 @@
 #define INDEX_TEMP_EAST_PIPE 3
 #define INDEX_TEMP_POOL 4
 #define INDEX_TEMP_AIR 5
-#define INDEX_PRESS_WEST 6
-#define INDEX_PRESS_EAST 7
-#define INDEX_PRESS_SYSTEM 8
+#define INDEX_PRES_WEST 6
+#define INDEX_PRES_EAST 7
+#define INDEX_PRES_SYSTEM 8
 
 #define ADDR_PUMP_WEST 2
 #define ADDR_PUMP_EAST 1 //CHANGE THIS TO 1 LATER
@@ -143,7 +143,7 @@ void decisionTree() {
   // then whether the east panel is too hot
   // then whether the east panel is hot enough to heat the pool
 
-  if (sensorReadings[INDEX_PRESS_SYSTEM] < minSystemPressure) {
+  if (sensorReadings[INDEX_PRES_SYSTEM] < minSystemPressure) {
 
     // the line pressure is too low: switch the pumps off
     switchWestOff();
@@ -394,6 +394,29 @@ void requestWriteFor(int deviceAddress, int value) {
   }
 }
 
+// Pressure transcucers return a 32bit float over 2 registers
+// This function takes the registers and shifts them together to reassemble the float value
+// For use in the system we can * 1000 to turn that into an integer value of millibars
+// to be consistent with other readings
+int convert32BitFloatToInt(ModbusResponse response) {
+  uint16_t reg8 = (response.getRegister(0));
+  uint16_t reg9 = (response.getRegister(1));
+
+  byte msb2 = reg8;
+  byte msb3 = reg8 >> 8;
+  byte msb0 = reg9;
+  byte msb1 = reg9 >> 8;
+
+  float x;
+  ((byte*)&x)[3] = msb3;
+  ((byte*)&x)[2] = msb2;
+  ((byte*)&x)[1] = msb1;
+  ((byte*)&x)[0] = msb0;
+
+  int p = x * 1000.0;
+  return p;
+}
+
 // Check often if a response is waiting
 // If there isn't this will just do nothing and the loop continues
 // until something happens
@@ -416,30 +439,21 @@ void listenForResponse () {
 #endif
 
       } else {
-        // Get the value from the response
-        // first check whether it is a pressure amd if it is get it and transfer it into integer format
-        if (deviceAddress == ( ADDR_PRES_SYST)) {
-          
-          uint16_t reg8 = (response.getRegister(0));
-          uint16_t reg9 = (response.getRegister(1));
+        // No error, handle the data
 
-          byte msb2 = reg8;
-          byte msb3 = reg8 >> 8;
-          byte msb0 = reg9;
-          byte msb1 = reg9 >> 8;
-
-          float x;
-          ((byte*)&x)[3] = msb3;
-          ((byte*)&x)[2] = msb2;
-          ((byte*)&x)[1] = msb1;
-          ((byte*)&x)[0] = msb0;
-
-          int p = x * 1000.0;
-          reading = p;
+        // Some devices return 32bit data across 2 registers, which needs to be converted
+        // For most sensors we can just store whats in the first register
+        switch (deviceAddress) {
+          case ADDR_PRES_EAST:
+          case ADDR_PRES_WEST:
+          case ADDR_PRES_SYST:
+            reading = convert32BitFloatToInt(response);
+          break;
+          default:
+            reading = response.getRegister(0);
+          break;
         }
-        else {       
-        reading = response.getRegister(0);
-        }
+
         // So now we have the reading, and the address that it came from
         // so it can be dealt with, eg. Save it into the right variable
         handleResponseData(deviceAddress, reading);
