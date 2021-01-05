@@ -3,7 +3,7 @@ This GITHUB entry describes the code and engineering details for a solar heating
 
 The code was written to generate new firmware for an M-Duino 19+ programmable logic controller to simplify coding for a less code-aware audience/maintenance.  The code used is C++ and uses a number of simplifying utility functions provided by the plc supplier (Boot and Work, Barcelona)
 
-The physical situation is described in 'PANELS3.pdf' and shows the flow circuit and the panels and pump layout.  The C&I electrical system layout (which shows the positions and identity of the pumps and sensors) is shown in 'Electrical diagram 8_8_2019.pdf'.  
+The physical situation is described in 'PANELS3.pdf' and shows the flow circuit and the panels and pump layout.  The C&I electrical system layout (which shows the positions and identity of the pumps and sensors) is shown in 'Electrical diagram 8_8_2019.pdf'.  Photos of the general layout of the main parts are shown in the xxx.jpg files
 
 The sensors are all digital and communicate using MODBUS RTU.  Similarly the pumps are activated through inverters using MODBUS RTU.  There are mains-operated motorised valves that are driven directly through 8 integral relays on the PLC module.
 
