@@ -1,5 +1,5 @@
 # wsp-solar2020
-This GITHUB entry describes the code and engineering details for a solar heating system at Wotton Pool.  The heating is to warm the pool water and uses two panels: one on the west face of a pitched roof and the other on the east face.  By good fortune (not design!) the ridge of the roof runs exactly north-south.  There are two identical mechanical systems so the single control system is uses 'west' or 'east' to identify the relavant valves, pumps etc.
+This GITHUB entry describes the code and engineering details for a solar heating system at Wotton Pool.  The heating is to warm the pool water and uses two panels: one on the west face of a pitched roof and the other on the east face.  By good fortune (not design!) the ridge of the roof runs exactly north-south.  There are two identical mechanical systems so the single control system is uses 'west' or 'east' to identify the relevant valves, pumps etc.
 
 The code was written to generate new firmware for M-Duino 19+ programmable logic controller to simplify coding for a less code-aware audience/maintenance.  The code used is C++ and uses a number of simplifying utility functions provided by the plc supplier (Boot and Work, Barcelona)
 
