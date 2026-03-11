@@ -1,0 +1,51 @@
+# TYPES (KEYWORD1)
+ModbusRTUMaster	KEYWORD1
+ModbusRTUSlave	KEYWORD1
+ModbusTCPMaster	KEYWORD1
+ModbusTCPSlave	KEYWORD1
+
+
+# FUNCTIONS (KEYWORD2)
+## -
+begin	KEYWORD2
+getExceptionMessage	KEYWORD2
+setTimeout		KEYWORD2
+hasException		KEYWORD2
+getException		KEYWORD2
+clearException		KEYWORD2
+setException		KEYWORD2
+getState		KEYWORD2
+setState		KEYWORD2
+hasError		KEYWORD2
+getErrorCode		KEYWORD2
+getSlave		KEYWORD2
+getFC		KEYWORD2
+isCoilSet		KEYWORD2
+isDiscreteInputSet		KEYWORD2
+isDiscreteSet		KEYWORD2
+getRegister		KEYWORD2
+
+readCoils		KEYWORD2
+readDiscreteInputs	KEYWORD2
+readHoldingRegisters	KEYWORD2
+readInputRegisters	KEYWORD2
+writeSingleCoil		KEYWORD2
+writeSingleRegister	KEYWORD2
+writeMultipleCoils	KEYWORD2
+writeMultipleRegisters	KEYWORD2
+
+## -Master
+isIdle		KEYWORD2
+isWaitingResponse		KEYWORD2
+available		KEYWORD2
+
+## -Slave
+update		KEYWORD2
+getSlaveAddress		KEYWORD2
+setCoils	KEYWORD2
+setDiscreteInputs	KEYWORD2
+setHoldingRegisters	KEYWORD2
+setInputRegisters	KEYWORD2
+
+
+# CONSTANTS (LITERAL1)

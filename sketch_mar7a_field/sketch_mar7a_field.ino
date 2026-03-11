@@ -16,10 +16,19 @@
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
 #define MQTT_ID "demo"
+#define MQTT_USER "mqtt"
+#define MQTT_PASS "123mqtt"
+
 byte mac[] = { 0xDE, 0xED, 0xBA, 0xFE, 0xFE, 0xAE };
+
+// Local
 //IPAddress broker(192, 168, 0, 128);
 
-IPAddress broker(178, 62, 65, 122);
+// Digital ocean
+// IPAddress broker(178, 62, 65, 122);
+
+// Fly
+IPAddress broker(137, 66, 31, 103);
 
 unsigned port = 1883;
 // Initialize client
@@ -573,7 +582,7 @@ void handleResponseData (int deviceAddress, int reading) {
 // Add some functions to run node red through MQTT
 ///////////////////////////////////////////////////////////////////////////////////////
 void reconnect() {
-  if (mqtt.connect(MQTT_ID)) {
+  if (mqtt.connect(MQTT_ID, MQTT_USER, MQTT_PASS)) {
 
   } else {
     // MQTT connect fail

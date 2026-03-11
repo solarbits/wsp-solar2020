@@ -1,0 +1,13 @@
+profiles:
+  mduino:
+    fqbn: industrialshields:avr:mduino:cpu=mduino19rplus
+    platforms:
+      - platform: industrialshields:avr (1.2.1)
+        platform_index_url: https://apps.industrialshields.com/main/arduino/boards/package_industrialshields_index.json
+    libraries:
+      - ArduinoJson (5.13.5)
+      - PubSubClient (2.8)
+      # Modbus 1.1.0 (Industrial Shields) is vendored in libraries/Modbus
+      # because it's not in the Arduino Library Manager.
+      # Source: https://github.com/Industrial-Shields/arduino-Modbus
+      # NOTE: Profiles can't use vendored libraries, so use setup.sh to build.
