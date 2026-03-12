@@ -8,6 +8,11 @@ Uses Modbus RTU over RS485 to read temperature and pressure sensors and control 
 
 - [arduino-cli](https://arduino.github.io/arduino-cli/) installed (e.g. `brew install arduino-cli`)
 
+## Running on the bench
+
+Note that the Ethernet board only works if the PLC is powered with an external power supply.
+You can flash the board, etc. with USB power, but best to use the power supply to run it.
+
 ## Setup
 
 Install the board core and libraries:
@@ -18,12 +23,12 @@ make setup
 
 This installs:
 
-| Dependency | Version | Source |
-|---|---|---|
-| industrialshields:avr (board core) | 1.2.1 | [Industrial Shields board manager](https://apps.industrialshields.com/main/arduino/boards/package_industrialshields_index.json) |
-| ArduinoJson | 5.13.5 | Arduino Library Manager |
-| PubSubClient | 2.8 | Arduino Library Manager |
-| Modbus (Industrial Shields) | 1.1.0 | Vendored in `libraries/Modbus` ([GitHub](https://github.com/Industrial-Shields/arduino-Modbus)) |
+| Dependency                         | Version | Source                                                                                                                          |
+| ---------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| industrialshields:avr (board core) | 1.2.1   | [Industrial Shields board manager](https://apps.industrialshields.com/main/arduino/boards/package_industrialshields_index.json) |
+| ArduinoJson                        | 5.13.5  | Arduino Library Manager                                                                                                         |
+| PubSubClient                       | 2.8     | Arduino Library Manager                                                                                                         |
+| Modbus (Industrial Shields)        | 1.1.0   | Vendored in `libraries/Modbus` ([GitHub](https://github.com/Industrial-Shields/arduino-Modbus))                                 |
 
 The Modbus library is vendored in the repo because it is not available in the Arduino Library Manager.
 
