@@ -15,7 +15,7 @@
 // libraries needed for MQTT communication
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
-#define MQTT_ID "demo"
+#define MQTT_ID "plc2"
 #define MQTT_USER "mqtt"
 #define MQTT_PASS "123mqtt"
 
