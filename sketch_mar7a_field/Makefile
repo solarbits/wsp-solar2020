@@ -1,5 +1,5 @@
 FQBN = industrialshields:avr:mduino:cpu=mduino19rplus
-PORT ?= /dev/ttyACM0
+PORT ?= /dev/cu.usbmodem2301
 SKETCH = sketch_mar7a_field.ino
 CLI = bin/arduino-cli
 BOARD_MANAGER_URL = https://apps.industrialshields.com/main/arduino/boards/package_industrialshields_index.json
