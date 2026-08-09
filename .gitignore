@@ -1,0 +1,8 @@
+# arduino-cli build output
+build/
+
+# Optional project-local arduino-cli binary (see Makefile)
+bin/
+
+# Claude Code local settings
+.claude/settings.local.json

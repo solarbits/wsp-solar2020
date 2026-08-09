@@ -1,0 +1,19 @@
+# Documents the pinned toolchain for this sketch.
+#
+# NOTE: this profile cannot actually build the sketch. arduino-cli profiles
+# can't reference vendored libraries, and the Industrial Shields Modbus library
+# is vendored at ../libraries/Modbus because it isn't in the Library Manager.
+# Build with the Makefile at the repository root instead:  make build
+#
+# Keep the versions below in sync with the Makefile.
+profiles:
+  mduino:
+    fqbn: industrialshields:avr:mduino:cpu=mduino19rplus
+    platforms:
+      - platform: industrialshields:avr (1.2.1)
+        platform_index_url: https://apps.industrialshields.com/main/arduino/boards/package_industrialshields_index.json
+    libraries:
+      - ArduinoJson (5.13.5)
+      - PubSubClient (2.8)
+      # Modbus 1.1.0 (Industrial Shields) -- vendored in ../libraries/Modbus
+      # Source: https://github.com/Industrial-Shields/arduino-Modbus
