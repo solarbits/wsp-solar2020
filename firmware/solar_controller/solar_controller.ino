@@ -128,6 +128,16 @@ const int maxPoolTemp = 300; // 30degC
 const int maxPanelTemp = 600; //(60degC)
 const int minSystemPressure = 35; // (35mb)
 
+// Moving average of the system pressure
+// Each sensor is read roughly every 0.9s (9 reads + 2 writes at ~80mS each)
+// so 8 samples is plenty of room for the averaging period
+const uint32_t presAveragePeriod = 3000UL; // 3 seconds
+const int numberOfPresSamples = 8;
+int presSamples[numberOfPresSamples];
+uint32_t presSampleTimes[numberOfPresSamples];
+int presSampleCount = 0;
+int presSampleIndex = 0;
+
 /////////////////////////////////////////////////////////////////////////////
 void setup() {
   Serial.begin(115200);
@@ -571,12 +581,37 @@ void handleResponseData (int deviceAddress, int reading) {
   // and set the reading with the same index when the address matches
   for (int i = 0; i < numberOfSensors; i++) {
     if (sensorAddresses[i] == deviceAddress) {
+      // The system pressure is saved as a moving average rather than the instantaneous value
+      if (i == INDEX_PRES_SYSTEM) reading = averageSystemPressure(reading);
       sensorReadings[i] = reading;
       break;
     }
   }
 
   // Not bothered about response from pumps unless printing them above in debug mode
+}
+///////////////////////////////////////////////////////////////////////////////////////
+// Save the new system pressure reading with the time it arrived
+// and return the average of all the readings from the last 3 seconds (including this one)
+int averageSystemPressure(int reading) {
+  uint32_t now = millis();
+
+  // Overwrite the oldest sample
+  presSamples[presSampleIndex] = reading;
+  presSampleTimes[presSampleIndex] = now;
+  presSampleIndex = (presSampleIndex + 1) % numberOfPresSamples;
+  if (presSampleCount < numberOfPresSamples) presSampleCount++;
+
+  // Only average the samples that are recent enough
+  long total = 0;
+  int count = 0;
+  for (int i = 0; i < presSampleCount; i++) {
+    if (now - presSampleTimes[i] <= presAveragePeriod) {
+      total += presSamples[i];
+      count++;
+    }
+  }
+  return total / count;
 }
 
 // Add some functions to run node red through MQTT
