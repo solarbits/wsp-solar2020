@@ -128,6 +128,14 @@ const int maxPoolTemp = 300; // 30degC
 const int maxPanelTemp = 600; //(60degC)
 const int minSystemPressure = 35; // (35mb)
 
+// Hysteresis: once a roof state has been entered it takes a bigger change to leave it,
+// so readings hovering around a limit don't switch the pumps on and off every 5 seconds
+const int heatStartDiff = 40;        // (4degC) panel must be this much hotter than the pool to start heating
+const int heatStopDiff = 15;         // (1.5degC) once heating, carry on until the panel is only this much hotter
+const int poolTempHysteresis = 5;    // (0.5degC) once too hot, the pool must cool below 29.5degC before heating again
+const int panelTempHysteresis = 50;  // (5degC) once cooling, carry on until the panel is below 55degC
+const int presHysteresis = 10;       // (10mb) after a low pressure trip, wait for 45mb before restarting
+
 // Moving average of the system pressure
 // Each sensor is read roughly every 0.9s (9 reads + 2 writes at ~80mS each)
 // so 8 samples is plenty of room for the averaging period
@@ -243,7 +251,12 @@ void decisionTree() {
   // then again whether the panel is too hot
   // then whether the east panel is too hot
   // then whether the east panel is hot enough to heat the pool
-  if (sensorReadings[INDEX_PRES_SYSTEM] < minSystemPressure) {
+  // Each limit is relaxed a little while already in the state it triggers (see the hysteresis constants)
+  // Both roofs share the line pressure so they always trip together, checking west is enough
+  int pressureLimit = minSystemPressure;
+  if (roofStates[INDEX_ROOF_WEST] == LOW_SYST_PRES) pressureLimit = minSystemPressure + presHysteresis;
+
+  if (sensorReadings[INDEX_PRES_SYSTEM] < pressureLimit) {
     // the line pressure is too low: switch the pumps off
     switchWestOff();
     switchEastOff();
@@ -253,10 +266,18 @@ void decisionTree() {
     return;
   }
   // the line pressure is ok, carry on :-)
-  if (sensorReadings[INDEX_TEMP_POOL] > maxPoolTemp) {
+  // Work out the west limits from what the west roof is already doing
+  int westPoolLimit = maxPoolTemp;
+  if (roofStates[INDEX_ROOF_WEST] == POOL_TOO_HOT || roofStates[INDEX_ROOF_WEST] == COOL_ROOF) westPoolLimit = maxPoolTemp - poolTempHysteresis;
+  int westPanelLimit = maxPanelTemp;
+  if (roofStates[INDEX_ROOF_WEST] == COOL_ROOF) westPanelLimit = maxPanelTemp - panelTempHysteresis;
+  int westHeatDiff = heatStartDiff;
+  if (roofStates[INDEX_ROOF_WEST] == HEAT_POOL) westHeatDiff = heatStopDiff;
+
+  if (sensorReadings[INDEX_TEMP_POOL] > westPoolLimit) {
     roofStates[INDEX_ROOF_WEST] = POOL_TOO_HOT;
     //  Pool is hot enough, check whether west panel is getting too hot
-    if (sensorReadings[INDEX_TEMP_WEST] > maxPanelTemp) {
+    if (sensorReadings[INDEX_TEMP_WEST] > westPanelLimit) {
       // Whoops, west panel is getting too hot: cool the roof
       roofStates[INDEX_ROOF_WEST] = COOL_ROOF;
       coolWestRoof();
@@ -265,8 +286,8 @@ void decisionTree() {
       switchWestOff();
     }
   } else {
-    // No the pool isn't too hot, is the west panel 0.5 degrees hotter than the pool?
-    if (sensorReadings[INDEX_TEMP_WEST] > (5 + sensorReadings[INDEX_TEMP_POOL])) {
+    // No the pool isn't too hot, is the west panel hot enough compared to the pool?
+    if (sensorReadings[INDEX_TEMP_WEST] > (westHeatDiff + sensorReadings[INDEX_TEMP_POOL])) {
       // Yes, its hotter than the pool and the pool needs the heat
       heatPoolFromWest();
       roofStates[INDEX_ROOF_WEST] = HEAT_POOL;
@@ -281,10 +302,17 @@ void decisionTree() {
     }
   }
   // that deals with the west side, now look at east. Repeat the checks every so often...
-  if (sensorReadings[INDEX_TEMP_POOL] > maxPoolTemp) {
+  int eastPoolLimit = maxPoolTemp;
+  if (roofStates[INDEX_ROOF_EAST] == POOL_TOO_HOT || roofStates[INDEX_ROOF_EAST] == COOL_ROOF) eastPoolLimit = maxPoolTemp - poolTempHysteresis;
+  int eastPanelLimit = maxPanelTemp;
+  if (roofStates[INDEX_ROOF_EAST] == COOL_ROOF) eastPanelLimit = maxPanelTemp - panelTempHysteresis;
+  int eastHeatDiff = heatStartDiff;
+  if (roofStates[INDEX_ROOF_EAST] == HEAT_POOL) eastHeatDiff = heatStopDiff;
+
+  if (sensorReadings[INDEX_TEMP_POOL] > eastPoolLimit) {
     roofStates[INDEX_ROOF_EAST] = POOL_TOO_HOT;
     //  Pool is hot enough, check whether east panel is getting too hot
-    if (sensorReadings[INDEX_TEMP_EAST] > maxPanelTemp) {
+    if (sensorReadings[INDEX_TEMP_EAST] > eastPanelLimit) {
       // Whoops, east panel is getting too hot, cool the roof
       roofStates[INDEX_ROOF_EAST] = COOL_ROOF;
       coolEastRoof();
@@ -293,8 +321,8 @@ void decisionTree() {
       switchEastOff();
     }
   } else {
-    // No the pool isn't too hot, is the east panel half a degree hotter than the pool?
-    if (sensorReadings[INDEX_TEMP_EAST] > (5 + sensorReadings[INDEX_TEMP_POOL])) {
+    // No the pool isn't too hot, is the east panel hot enough compared to the pool?
+    if (sensorReadings[INDEX_TEMP_EAST] > (eastHeatDiff + sensorReadings[INDEX_TEMP_POOL])) {
       // Yes, it's hotter than the pool and the pool needs the heat
       roofStates[INDEX_ROOF_EAST] = HEAT_POOL;
       heatPoolFromEast();

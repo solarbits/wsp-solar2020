@@ -60,7 +60,7 @@ Pressure transducers return a 32-bit float split across two input registers in a
 
 | Quantity | Encoding |
 | --- | --- |
-| Temperature | tenths of °C (`300` = 30 °C); the `+5` in `decisionTree()` is a 0.5 °C threshold |
+| Temperature | tenths of °C (`300` = 30 °C); so `heatStartDiff = 40` is a 4 °C threshold |
 | Pressure | millibars (float × 1000) |
 | Power | **decawatts** — kept small so the JSON int stays under 32767; `ΔT × 14` from 20 L/min flow |
 | pH | hundredths (`700` = pH 7.0) |
