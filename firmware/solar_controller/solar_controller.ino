@@ -128,11 +128,16 @@ const int maxPoolTemp = 300; // 30degC
 const int maxPanelTemp = 600; //(60degC)
 const int minSystemPressure = 35; // (35mb)
 
+// Hysteresis: once in these states it takes a bigger change to leave them,
+// so readings hovering around a limit don't switch the pumps on and off every 5 seconds
+const int panelTempHysteresis = 50;  // (5degC) once cooling, carry on until the panel is below 55degC
+const int presHysteresis = 5;        // (5mb) after a low pressure trip, wait for 40mb before restarting
+
 // Moving average of the system pressure
 // Each sensor is read roughly every 0.9s (9 reads + 2 writes at ~80mS each)
-// so 8 samples is plenty of room for the averaging period
-const uint32_t presAveragePeriod = 3000UL; // 3 seconds
-const int numberOfPresSamples = 8;
+// so 16 samples is plenty of room for the averaging period
+const uint32_t presAveragePeriod = 10000UL; // 10 seconds
+const int numberOfPresSamples = 16;
 int presSamples[numberOfPresSamples];
 uint32_t presSampleTimes[numberOfPresSamples];
 int presSampleCount = 0;
@@ -243,7 +248,12 @@ void decisionTree() {
   // then again whether the panel is too hot
   // then whether the east panel is too hot
   // then whether the east panel is hot enough to heat the pool
-  if (sensorReadings[INDEX_PRES_SYSTEM] < minSystemPressure) {
+  // The pressure and roof cooling limits are relaxed a little while already in the state they trigger
+  // (see the hysteresis constants). Both roofs share the line pressure so they always trip together, checking west is enough
+  int pressureLimit = minSystemPressure;
+  if (roofStates[INDEX_ROOF_WEST] == LOW_SYST_PRES) pressureLimit = minSystemPressure + presHysteresis;
+
+  if (sensorReadings[INDEX_PRES_SYSTEM] < pressureLimit) {
     // the line pressure is too low: switch the pumps off
     switchWestOff();
     switchEastOff();
@@ -253,10 +263,14 @@ void decisionTree() {
     return;
   }
   // the line pressure is ok, carry on :-)
+  // Work out the west cooling limit from what the west roof is already doing
+  int westPanelLimit = maxPanelTemp;
+  if (roofStates[INDEX_ROOF_WEST] == COOL_ROOF) westPanelLimit = maxPanelTemp - panelTempHysteresis;
+
   if (sensorReadings[INDEX_TEMP_POOL] > maxPoolTemp) {
     roofStates[INDEX_ROOF_WEST] = POOL_TOO_HOT;
     //  Pool is hot enough, check whether west panel is getting too hot
-    if (sensorReadings[INDEX_TEMP_WEST] > maxPanelTemp) {
+    if (sensorReadings[INDEX_TEMP_WEST] > westPanelLimit) {
       // Whoops, west panel is getting too hot: cool the roof
       roofStates[INDEX_ROOF_WEST] = COOL_ROOF;
       coolWestRoof();
@@ -281,10 +295,13 @@ void decisionTree() {
     }
   }
   // that deals with the west side, now look at east. Repeat the checks every so often...
+  int eastPanelLimit = maxPanelTemp;
+  if (roofStates[INDEX_ROOF_EAST] == COOL_ROOF) eastPanelLimit = maxPanelTemp - panelTempHysteresis;
+
   if (sensorReadings[INDEX_TEMP_POOL] > maxPoolTemp) {
     roofStates[INDEX_ROOF_EAST] = POOL_TOO_HOT;
     //  Pool is hot enough, check whether east panel is getting too hot
-    if (sensorReadings[INDEX_TEMP_EAST] > maxPanelTemp) {
+    if (sensorReadings[INDEX_TEMP_EAST] > eastPanelLimit) {
       // Whoops, east panel is getting too hot, cool the roof
       roofStates[INDEX_ROOF_EAST] = COOL_ROOF;
       coolEastRoof();
@@ -592,7 +609,7 @@ void handleResponseData (int deviceAddress, int reading) {
 }
 ///////////////////////////////////////////////////////////////////////////////////////
 // Save the new system pressure reading with the time it arrived
-// and return the average of all the readings from the last 3 seconds (including this one)
+// and return the average of all the readings from the last averaging period (including this one)
 int averageSystemPressure(int reading) {
   uint32_t now = millis();
 
