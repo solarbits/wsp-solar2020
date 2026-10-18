@@ -17,7 +17,7 @@ so the Node-RED dashboard can show it next to the other panel readings.
 | East panel | I0.1 | `I0_1` = pin 3 (hardware interrupt INT5) |
 
 West on I0.0 and east on I0.1 follows the sketch's existing west-first ordering
-(`INDEX_ROOF_WEST = 0`). Both inputs are free: chemistry uses I0.2 and I0.3.
+(`INDEX_ROOF_WEST = 0`). Both inputs are free (I0.2 and I0.3, once used for chemistry, are also now unused).
 Both are also the board's interrupt-capable inputs, so the PLC will not miss a
 pulse even while the loop is busy, for example during an MQTT reconnect.
 
