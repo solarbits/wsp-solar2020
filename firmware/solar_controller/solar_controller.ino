@@ -4,7 +4,7 @@
   plus code added to tell node red the state of the roofs
   plus code added to calculate power
   plus code to skip obviously spurious data
-  includes pH and Cl measurements
+  pH and Cl measurements removed (now handled elsewhere)
   was uploaded on site on 7/3/21
   and seems to work
 */
@@ -92,8 +92,6 @@ const int pumpAddresses[numberOfPumps] = {ADDR_PUMP_WEST, ADDR_PUMP_EAST};
 
 const int numberOfRoofs = 2;
 
-const int numberOfChems = 2;
-
 // Current device being read (index in the above array)
 int sensorIndex = 0;
 int pumpIndex = 0;
@@ -106,8 +104,6 @@ int sensorReadings[numberOfSensors] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 int roofStates[numberOfRoofs] = {0, 0};
 // Power (calculated later in decaWatts -- to keep integer field under 32,000)
 int roofPowers[numberOfRoofs] = {0, 0};
-// Chemical concnetrations measured later and written into here
-int chemConcentrations[numberOfChems] = {0, 0};
 
 // Modbus modes, when all addresses from each mode have been read or written, then move onto the next mode
 #define MODBUS_REQUEST_READ 1
@@ -210,8 +206,6 @@ void loop() {
     // Using the saved values, decide what to do
     // and set new pump states based on temperature comparisons
     decisionTree();
-    // Also get the analog chemistry data
-    readChemistry();
 
     for (int i = 0; i < numberOfRoofs; i++) {
       if (roofStates[i] != HEAT_POOL)  roofPowers[i] = 0;
@@ -226,9 +220,6 @@ void loop() {
     for (int i = 0; i < numberOfRoofs; i++) {
       publishInput(2, i, roofStates[i]);
       publishInput(3, i, roofPowers[i]);
-    }
-    for (int i = 0; i < numberOfChems; i++) {
-      publishInput(4, i, chemConcentrations[i]);
     }
     lastPrintedTime = millis();
   }
@@ -674,29 +665,4 @@ void publish( char *topic, char *payload) {
     Serial.print(" ");
     Serial.println(payload);
   }
-}
-////////////////////////////////////////////////////////////////////////////////////////////
-void readChemistry() {
-  // The pH scale on the Jesco doser goes from 2 to 12 and corresponds to 0 to 20 mA (not 4-20mA)
-  // put the current through 470 ohms (the doser has a maximum tolerable resistance of 500 ohms)
-  // so the output of the doser will range from 0.00 V to 9.40 V
-  // M-duino ADC has a 0-10V range for numbers 0-1023, so the available range for pH 2 to 12 is 0 to (0.94 x 1023), 0-962
-  // 1/962 = 0.00104
-  // calculate the pH in hundredths
-  int pH100 = 200 + (analogRead(I0_2) * 1.04);
-  chemConcentrations[0] = pH100;
-  // The Chlorine scale on the Jesco doser goes from 0 ppm to 4 ppm and corresponds to 0 to 20 mA (not 4-20mA)
-  // put the current through 470 ohms (the doser has a maximum tolerable resistance of 500 ohms)
-  // so the output of the doser will range from 0.00 V to 9.40 V
-  // M-duino ADC has a 0-10V range for numbers 0-1023, so the available range for pH 2 to 12 is 0 to (0.94 x 1023), 0-962
-  // 1/962 = 0.00104
-  // calculate the Chlorine concentration in parts per 10,000
-  int chlor100 = (analogRead(I0_3) * 4 * 0.104);
-  chemConcentrations[1] = chlor100;
-    Serial.print("chemistry values: ");
-  for (int i = 0; i < numberOfChems; i++) {
-    Serial.print(chemConcentrations[i]);
-    Serial.print(", ");
-  }
-  Serial.println();
 }
