@@ -1,6 +1,6 @@
 # Design: flow meters on the west and east panels
 
-**Status:** proposal, for review before any code is written.
+**Status:** implemented in the sketch (`handleFlowEdge()`, `calculateFlowRates()`). The review questions at the end were still open when the code was written, so it follows the assumptions below. The Node-RED side is not done: the live flows are now in https://github.com/errkk/wsp-node-red.
 
 ## What we're adding
 

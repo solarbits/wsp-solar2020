@@ -52,7 +52,9 @@ Single file, ~650 lines, flat C-style functions. Everything is coordinated throu
 `loop()` never blocks. Two independent millis()-based timers:
 
 - **~80 ms tick** — issues exactly one Modbus transaction, then services MQTT. A `modbusRequestMode` state machine walks the whole sensor array in `MODBUS_REQUEST_READ`, flips to `MODBUS_REQUEST_WRITE` to push all pump states, then flips back. `listenForResponse()` is called every iteration (not on the tick) and dispatches replies by slave address; readings are matched back into `sensorReadings[]` by searching `sensorAddresses[]`.
-- **5 s tick** — runs `decisionTree()`, `readChemistry()`, and publishes everything.
+- **5 s tick** — runs `decisionTree()`, `calculateFlowRates()`, `readChemistry()`, and publishes everything.
+
+The flow meters are the one exception to polling: I0.0 (west) and I0.1 (east) are hardware interrupt inputs, and `handleFlowEdge()` counts a pulse when a meter's switch closes after being open for at least 200 ms. See `docs/design/flow-meters.md`.
 
 Pressure transducers return a 32-bit float split across two input registers in a swapped word order; `convert32BitFloatToInt()` reassembles it byte-by-byte and scales to millibars. `handleResponseData()` silently drops readings outside −500…3000 as spurious.
 
@@ -62,6 +64,7 @@ Pressure transducers return a 32-bit float split across two input registers in a
 | --- | --- |
 | Temperature | tenths of °C (`300` = 30 °C); the `+5` in `decisionTree()` is a 0.5 °C threshold |
 | Pressure | millibars (float × 1000) |
+| Flow rate | tenths of L/min (`200` = 20 L/min), from flow meter pulses every 10 L |
 | Power | **decawatts** — kept small so the JSON int stays under 32767; `ΔT × 14` from 20 L/min flow |
 | pH | hundredths (`700` = pH 7.0) |
 | Chlorine | hundredths of ppm |
@@ -76,6 +79,6 @@ The four relay helpers (`switchWestOff`, `coolWestRoof`, `heatPoolFromWest`, and
 
 ### MQTT
 
-Every value is published individually to topic `IP65` as `{"zone":N,"index":I,"value":V}` via ArduinoJson 5 (`DynamicJsonBuffer` — v5 API, not v6/v7). Zones: `0` sensors, `1` pumps, `2` roof states, `3` roof powers, `4` chemistry. `index` is the corresponding `INDEX_*` value. `node-red/README.md` documents the full contract; changing zone/index numbering or the topic breaks the dashboard flows in `node-red/`.
+Every value is published individually to topic `IP65` as `{"zone":N,"index":I,"value":V}` via ArduinoJson 5 (`DynamicJsonBuffer` — v5 API, not v6/v7). Zones: `0` sensors, `1` pumps, `2` roof states, `3` roof powers, `4` chemistry, `5` flow rates. `index` is the corresponding `INDEX_*` value. `node-red/README.md` documents the full contract; changing zone/index numbering or the topic breaks the dashboard flows in `node-red/`.
 
 Broker IP, port, `MQTT_ID`, `MQTT_USER`/`MQTT_PASS` are `#define`d at the top of the sketch; past brokers are left commented out. **`MQTT_ID` must be unique per physical PLC** — two boards sharing a client ID will repeatedly kick each other off the broker.

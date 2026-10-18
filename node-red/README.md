@@ -29,5 +29,6 @@ kind, matching the `INDEX_*` constants in the sketch.
 | 2    | Roof states (2)     | 0 low pressure, 1 pool too hot, 2 cool roof, 3 heat pool, 4 await sunshine                                                                                                                                       |
 | 3    | Roof powers (2)     | decawatts                                                                                                                                                                                                        |
 | 4    | Chemistry (2)       | 0 = pH ×100, 1 = chlorine in hundredths of ppm. note this is no longer used, chemistry is read directly from the doser by node red over modbus TCP over a VPN. So this part of the payload could be repuroposed. |
+| 5    | Flow rates (2)      | 0 = west panel, 1 = east panel, in tenths of a litre per minute (`200` = 20 L/min). From the flow meters on I0.0/I0.1; 0 when stopped. |
 
 Changing the zone/index numbering or the topic in the sketch breaks these flows.

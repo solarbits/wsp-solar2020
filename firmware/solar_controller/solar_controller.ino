@@ -82,6 +82,11 @@ PubSubClient mqtt(client);
 #define INDEX_ROOF_WEST 0
 #define INDEX_ROOF_EAST 1
 
+// Flow meters on the opto-isolated interrupt inputs, west first like the roofs
+// Each meter closes a switch every 10 litres, feeding 24V into the input (HIGH = closed)
+#define INDEX_FLOW_WEST 0
+#define INDEX_FLOW_EAST 1
+
 const int numberOfSensors = 9; // Update this if you add another one below
 const int sensorAddresses[numberOfSensors] = {ADDR_TEMP_WEST, ADDR_TEMP_WEST_PIPE, ADDR_TEMP_EAST,
                                               ADDR_TEMP_EAST_PIPE, ADDR_TEMP_POOL, ADDR_TEMP_AIR,
@@ -91,6 +96,9 @@ const int numberOfPumps = 2;
 const int pumpAddresses[numberOfPumps] = {ADDR_PUMP_WEST, ADDR_PUMP_EAST};
 
 const int numberOfRoofs = 2;
+
+const int numberOfFlows = 2;
+const uint8_t flowPins[numberOfFlows] = {I0_0, I0_1};
 
 const int numberOfChems = 2;
 
@@ -106,6 +114,8 @@ int sensorReadings[numberOfSensors] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 int roofStates[numberOfRoofs] = {0, 0};
 // Power (calculated later in decaWatts -- to keep integer field under 32,000)
 int roofPowers[numberOfRoofs] = {0, 0};
+// Flow rates in tenths of litres per minute, worked out from the flow meter pulses
+int flowRates[numberOfFlows] = {0, 0};
 // Chemical concnetrations measured later and written into here
 int chemConcentrations[numberOfChems] = {0, 0};
 
@@ -143,6 +153,20 @@ uint32_t presSampleTimes[numberOfPresSamples];
 int presSampleCount = 0;
 int presSampleIndex = 0;
 
+// Flow meter pulses
+// A pulse only counts when the switch closes after being open for at least flowMinOpenTime,
+// which ignores switch bounce, and means a meter that stops with its switch closed
+// is not counted again until it has opened and closed again 10 litres later
+const uint32_t flowMinOpenTime = 200UL;        // 200mS
+const uint32_t flowStoppedTimeout = 300000UL;  // 5 minutes without a pulse (under 2 L/min) counts as stopped
+const uint32_t flowTenthsPerMinute = 6000000UL; // 10 litres x 60,000mS x 10, divided by the mS per pulse
+// Written by the interrupts, so volatile, and read with interrupts paused
+volatile bool flowSwitchOpened[numberOfFlows] = {false, false};
+volatile uint32_t flowOpenedTime[numberOfFlows] = {0, 0};
+volatile bool flowPulseSeen[numberOfFlows] = {false, false};
+volatile uint32_t flowPulseTime[numberOfFlows] = {0, 0};
+volatile uint32_t flowPulseInterval[numberOfFlows] = {0, 0}; // 0 until there are two pulses in a row
+
 /////////////////////////////////////////////////////////////////////////////
 void setup() {
   Serial.begin(115200);
@@ -159,6 +183,17 @@ void setup() {
 
   RS485.begin(BAUDRATE, HALFDUPLEX, SERIAL_8N1);
   master.begin(BAUDRATE);
+
+  // Flow meters: a switch that is already closed at power up has to open before its first pulse counts
+  for (int i = 0; i < numberOfFlows; i++) {
+    pinMode(flowPins[i], INPUT);
+    if (digitalRead(flowPins[i]) == LOW) {
+      flowSwitchOpened[i] = true;
+      flowOpenedTime[i] = millis();
+    }
+  }
+  attachInterrupt(digitalPinToInterrupt(flowPins[INDEX_FLOW_WEST]), flowEdgeWest, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(flowPins[INDEX_FLOW_EAST]), flowEdgeEast, CHANGE);
   Serial.println("Starting ");
 }
 //////////////////////////////////////////////////////////////////////////////
@@ -210,6 +245,14 @@ void loop() {
     // Using the saved values, decide what to do
     // and set new pump states based on temperature comparisons
     decisionTree();
+    // and work out the flow rates from the flow meter pulses
+    calculateFlowRates();
+    Serial.print("Flow rates: ");
+    for (int i = 0; i < numberOfFlows; i++) {
+      Serial.print(flowRates[i]);
+      Serial.print(", ");
+    }
+    Serial.println();
     // Also get the analog chemistry data
     readChemistry();
 
@@ -226,6 +269,9 @@ void loop() {
     for (int i = 0; i < numberOfRoofs; i++) {
       publishInput(2, i, roofStates[i]);
       publishInput(3, i, roofPowers[i]);
+    }
+    for (int i = 0; i < numberOfFlows; i++) {
+      publishInput(5, i, flowRates[i]);
     }
     for (int i = 0; i < numberOfChems; i++) {
       publishInput(4, i, chemConcentrations[i]);
@@ -699,4 +745,64 @@ void readChemistry() {
     Serial.print(", ");
   }
   Serial.println();
+}
+///////////////////////////////////////////////////////////////////////////////////////
+// Flow meter interrupts, called every time either input changes
+void flowEdgeWest() {
+  handleFlowEdge(INDEX_FLOW_WEST);
+}
+void flowEdgeEast() {
+  handleFlowEdge(INDEX_FLOW_EAST);
+}
+// Remember when the switch opens, and count a pulse when it closes after being open long enough
+void handleFlowEdge(int i) {
+  uint32_t now = millis();
+
+  if (digitalRead(flowPins[i]) == LOW) {
+    // Switch has opened
+    flowSwitchOpened[i] = true;
+    flowOpenedTime[i] = now;
+    return;
+  }
+  // Switch has closed: ignore it if it's bounce, or if we never saw it open
+  if (!flowSwitchOpened[i] || now - flowOpenedTime[i] < flowMinOpenTime) return;
+  flowSwitchOpened[i] = false;
+
+  // A real pulse. Only time it against the previous pulse if the water was still flowing then,
+  // otherwise the interval would include the time it was stopped
+  if (flowPulseSeen[i] && now - flowPulseTime[i] < flowStoppedTimeout) {
+    flowPulseInterval[i] = now - flowPulseTime[i];
+  } else {
+    flowPulseInterval[i] = 0;
+  }
+  flowPulseSeen[i] = true;
+  flowPulseTime[i] = now;
+}
+///////////////////////////////////////////////////////////////////////////////////////
+// Work out each flow rate in tenths of L/min from the time between the last two pulses.
+// If it's already been longer than that since the last pulse, the flow has slowed down,
+// so use the time since the last pulse instead. No pulse for 5 minutes means stopped.
+void calculateFlowRates() {
+  for (int i = 0; i < numberOfFlows; i++) {
+    uint32_t now = millis();
+
+    // Copy what the interrupts have recorded, with them paused so the values can't change halfway through
+    noInterrupts();
+    if (flowPulseSeen[i] && now - flowPulseTime[i] >= flowStoppedTimeout) {
+      // Forget a pulse once the flow has stopped, so it can't look recent again when millis() wraps round
+      flowPulseSeen[i] = false;
+    }
+    bool pulseSeen = flowPulseSeen[i];
+    uint32_t pulseTime = flowPulseTime[i];
+    uint32_t pulseInterval = flowPulseInterval[i];
+    interrupts();
+
+    if (!pulseSeen || pulseInterval == 0) {
+      flowRates[i] = 0;
+      continue;
+    }
+    uint32_t sinceLastPulse = now - pulseTime;
+    if (sinceLastPulse > pulseInterval) pulseInterval = sinceLastPulse;
+    flowRates[i] = flowTenthsPerMinute / pulseInterval;
+  }
 }
