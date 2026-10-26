@@ -21,16 +21,21 @@ West on I0.0 and east on I0.1 follows the sketch's existing west-first ordering
 Both are also the board's interrupt-capable inputs, so the PLC will not miss a
 pulse even while the loop is busy, for example during an MQTT reconnect.
 
-**Wiring — please check.** The I0.x inputs are opto-isolated and need a
-voltage to switch them on (the 19R+ inputs accept 5–24 V DC). A passive switch
-on its own produces no voltage, so the switch has to sit between the
-supply and the input:
+**Wiring.** The I0.x inputs are opto-isolated and need a voltage to switch
+them on. The M-Duino guide rates the interrupt inputs for 5, 12 or 24 V DC,
+needing at least 6 mA at 12 V. A passive switch on its own produces no voltage,
+so each meter's switch is wired in series with an 1800 Ω resistor between a
+12 V DC supply and the input:
 
 ```
-+24 V (PLC supply) ──── flow meter switch ──── I0.0  (west)
-+24 V (PLC supply) ──── flow meter switch ──── I0.1  (east)
-0 V (PLC supply)   ──── input GND / COM terminal for the I0 inputs
++12 V ──── 1800 Ω ──── flow meter switch ──── I0.0  (west)
++12 V ──── 1800 Ω ──── flow meter switch ──── I0.1  (east)
+0 V of the 12 V supply ──── GND terminal next to each of I0.0 and I0.1
 ```
+
+The input's status LED should light each time the switch closes. If it doesn't,
+the current through the resistor and input may be below the 6 mA the input
+needs at 12 V.
 
 Wiring the switch between the input and its GND terminal with no supply in the
 loop will never register a pulse. The input then reads HIGH while the switch is
@@ -124,8 +129,8 @@ live instance and wiring to the existing Zone Switch there.
 
 ## Questions for review
 
-1. Is the wiring above how the flow meters will be connected (24 V through the
-   switch into I0.0/I0.1)?
+1. ~~Is the wiring above how the flow meters will be connected?~~ Answered:
+   12 V through an 1800 Ω resistor and the switch into I0.0/I0.1.
 2. Are the 200 ms minimum open time and the 5-minute "stopped" timeout sensible
    for these meters?
 3. Is tenths of L/min in a new zone 5 acceptable for the dashboard?
