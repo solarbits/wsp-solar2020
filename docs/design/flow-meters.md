@@ -5,7 +5,8 @@
 ## What we're adding
 
 Each panel circuit (west and east) gets a flow meter with a passive switch that
-closes once every 10 litres and opens again shortly afterwards. The PLC counts
+closes once every litre and opens again shortly afterwards. (The design first
+assumed one pulse every 10 litres; the meters actually pulse every litre.) The PLC counts
 these pulses, works out a flow rate for each panel, and publishes it over MQTT
 so the Node-RED dashboard can show it next to the other panel readings.
 
@@ -56,11 +57,13 @@ That one rule deals with both switch bounce and the stopped-while-closed case:
 | Normal pulse | The switch has been open for many seconds, so the closing counts once. |
 | Bounce as the switch closes | The bounce's brief openings last milliseconds, so the re-closings are ignored. |
 | Flow stops with the switch closed | No edges, so nothing is counted, however long it stays closed. |
-| Flow restarts and the switch opens | Opening never counts. Any bounce as it opens is ignored, because the switch hasn't been open for 200 ms. The next real closing, 10 litres later, counts normally. |
+| Flow restarts and the switch opens | Opening never counts. Any bounce as it opens is ignored, because the switch hasn't been open for 200 ms. The next real closing, a litre later, counts normally. |
 | Switch already closed when the PLC starts | Treated as "not yet opened", so the first pulse is counted only after the switch has opened and closed again. |
 
-200 ms is far shorter than the time between genuine pulses: even at 100 L/min a
-pulse comes only every 6 s. The pulse counts and times are shared with the
+200 ms is well under the time between genuine pulses: at 20 L/min a pulse comes
+every 3 s. The switch needs to stay open for at least 200 ms between pulses, so
+very high flows (where a pulse comes every half second or so) would need that
+figure reviewing. The pulse counts and times are shared with the
 main loop with interrupts briefly paused while they are read, the standard
 way to read multi-byte values safely on this processor.
 
@@ -69,13 +72,13 @@ way to read multi-byte values safely on this processor.
 The flow rate comes from the time between the last two pulses:
 
 ```
-flow (L/min) = 10 litres × 60,000 / interval in ms
+flow (L/min) = 1 litre × 60,000 / interval in ms
 ```
 
 It is stored as an integer in **tenths of a litre per minute**, like the other
 readings, so 20 L/min is published as `200`.
 
-Because a pulse only comes every 10 litres, the figure needs care when the
+Because a pulse only comes every litre, the figure needs care when the
 flow slows or stops:
 
 - **Slowing or stopped flow.** If the time since the last pulse is already
@@ -83,13 +86,13 @@ flow slows or stops:
   worked out from the time since the last pulse instead, so the displayed
   value falls steadily rather than sticking at the old figure.
 - **Flow stopped.** If there has been no pulse for **5 minutes** (below
-  2 L/min), the flow rate is reported as 0.
+  0.2 L/min), the flow rate is reported as 0.
 - **First pulse after a stop.** The interval would include the stopped time,
   so it is not used for the rate. The rate stays at 0 until the next pulse
   gives a real interval.
 
-At 20 L/min a new pulse arrives every 30 s, so the figure updates about twice
-a minute even though it is published every 5 s.
+At 20 L/min a new pulse arrives every 3 s, so the figure is fresh each time it
+is published every 5 s.
 
 ## MQTT and the dashboard
 

@@ -64,7 +64,7 @@ Pressure transducers return a 32-bit float split across two input registers in a
 | --- | --- |
 | Temperature | tenths of °C (`300` = 30 °C); the `+5` in `decisionTree()` is a 0.5 °C threshold |
 | Pressure | millibars (float × 1000) |
-| Flow rate | tenths of L/min (`200` = 20 L/min), from flow meter pulses every 10 L |
+| Flow rate | tenths of L/min (`200` = 20 L/min), from flow meter pulses every litre |
 | Power | **decawatts** — kept small so the JSON int stays under 32767; `ΔT × 14` from 20 L/min flow |
 
 ### `decisionTree()`

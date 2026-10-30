@@ -83,7 +83,7 @@ PubSubClient mqtt(client);
 #define INDEX_ROOF_EAST 1
 
 // Flow meters on the opto-isolated interrupt inputs, west first like the roofs
-// Each meter closes a switch every 10 litres, feeding 12V through an 1800 ohm resistor into the input (HIGH = closed)
+// Each meter closes a switch every litre, feeding 12V through an 1800 ohm resistor into the input (HIGH = closed)
 #define INDEX_FLOW_WEST 0
 #define INDEX_FLOW_EAST 1
 
@@ -152,10 +152,10 @@ int presSampleIndex = 0;
 // Flow meter pulses
 // A pulse only counts when the switch closes after being open for at least flowMinOpenTime,
 // which ignores switch bounce, and means a meter that stops with its switch closed
-// is not counted again until it has opened and closed again 10 litres later
+// is not counted again until it has opened and closed again a litre later
 const uint32_t flowMinOpenTime = 200UL;        // 200mS
-const uint32_t flowStoppedTimeout = 300000UL;  // 5 minutes without a pulse (under 2 L/min) counts as stopped
-const uint32_t flowTenthsPerMinute = 6000000UL; // 10 litres x 60,000mS x 10, divided by the mS per pulse
+const uint32_t flowStoppedTimeout = 300000UL;  // 5 minutes without a pulse (under 0.2 L/min) counts as stopped
+const uint32_t flowTenthsPerMinute = 600000UL; // 1 litre x 60,000mS x 10, divided by the mS per pulse
 // Written by the interrupts, so volatile, and read with interrupts paused
 volatile bool flowSwitchOpened[numberOfFlows] = {false, false};
 volatile uint32_t flowOpenedTime[numberOfFlows] = {0, 0};
