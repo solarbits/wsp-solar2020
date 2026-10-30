@@ -33,9 +33,9 @@ so each meter's switch is wired in series with an 1800 Ω resistor between a
 0 V of the 12 V supply ──── GND terminal next to each of I0.0 and I0.1
 ```
 
-The input's status LED should light each time the switch closes. If it doesn't,
-the current through the resistor and input may be below the 6 mA the input
-needs at 12 V.
+This was confirmed working on site on 30 October 2026: both meters register
+pulses through the 1800 Ω resistor. If an input ever stops registering, check
+its status LED lights when the switch closes.
 
 Wiring the switch between the input and its GND terminal with no supply in the
 loop will never register a pulse. The input then reads HIGH while the switch is
@@ -130,7 +130,8 @@ live instance and wiring to the existing Zone Switch there.
 ## Questions for review
 
 1. ~~Is the wiring above how the flow meters will be connected?~~ Answered:
-   12 V through an 1800 Ω resistor and the switch into I0.0/I0.1.
+   12 V through an 1800 Ω resistor and the switch into I0.0/I0.1, confirmed
+   working on site.
 2. Are the 200 ms minimum open time and the 5-minute "stopped" timeout sensible
    for these meters?
 3. Is tenths of L/min in a new zone 5 acceptable for the dashboard?
