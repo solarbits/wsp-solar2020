@@ -83,7 +83,7 @@ PubSubClient mqtt(client);
 #define INDEX_ROOF_EAST 1
 
 // Flow meters on the opto-isolated interrupt inputs, west first like the roofs
-// Each meter closes a switch every 10 litres, feeding 24V into the input (HIGH = closed)
+// Each meter closes a switch every 10 litres, feeding 12V through an 1800 ohm resistor into the input (HIGH = closed)
 #define INDEX_FLOW_WEST 0
 #define INDEX_FLOW_EAST 1
 
