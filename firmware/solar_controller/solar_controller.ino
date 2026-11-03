@@ -139,6 +139,13 @@ const int minSystemPressure = 35; // (35mb)
 const int panelTempHysteresis = 50;  // (5degC) once cooling, carry on until the panel is below 55degC
 const int presHysteresis = 5;        // (5mb) after a low pressure trip, wait for 40mb before restarting
 
+// Once a pump is switched on or off it stays that way for pumpHoldTime, so readings dithering
+// between the switch-on and switch-off figures can't send the inverters a stream of on/off commands.
+// Low system pressure still switches the pumps off straight away
+const uint32_t pumpHoldTime = 45000UL; // 45 seconds
+bool pumpHeld[numberOfPumps] = {false, false};
+uint32_t pumpChangedTime[numberOfPumps] = {0, 0};
+
 // Moving average of the system pressure
 // Each sensor is read roughly every 0.9s (9 reads + 2 writes at ~80mS each)
 // so 16 samples is plenty of room for the averaging period
@@ -287,6 +294,7 @@ void decisionTree() {
   // then whether the east panel is hot enough to heat the pool
   // The pressure and roof cooling limits are relaxed a little while already in the state they trigger
   // (see the hysteresis constants). Both roofs share the line pressure so they always trip together, checking west is enough
+  // A side whose pump was switched on or off in the last pumpHoldTime is left as it is, unless the pressure is low
   int pressureLimit = minSystemPressure;
   if (roofStates[INDEX_ROOF_WEST] == LOW_SYST_PRES) pressureLimit = minSystemPressure + presHysteresis;
 
@@ -300,6 +308,19 @@ void decisionTree() {
     return;
   }
   // the line pressure is ok, carry on :-)
+  if (pumpIsHeld(INDEX_PUMP_WEST)) {
+    Serial.println("West pump held");
+  } else {
+    decideWest();
+  }
+  if (pumpIsHeld(INDEX_PUMP_EAST)) {
+    Serial.println("East pump held");
+  } else {
+    decideEast();
+  }
+}
+//////////////////////////////////////////////////////////////////////////
+void decideWest() {
   // Work out the west cooling limit from what the west roof is already doing
   int westPanelLimit = maxPanelTemp;
   if (roofStates[INDEX_ROOF_WEST] == COOL_ROOF) westPanelLimit = maxPanelTemp - panelTempHysteresis;
@@ -331,7 +352,10 @@ void decisionTree() {
       roofStates[INDEX_ROOF_WEST] = AWAIT_SUNSHINE;
     }
   }
-  // that deals with the west side, now look at east. Repeat the checks every so often...
+}
+//////////////////////////////////////////////////////////////////////////
+void decideEast() {
+  // Same checks again for the east side
   int eastPanelLimit = maxPanelTemp;
   if (roofStates[INDEX_ROOF_EAST] == COOL_ROOF) eastPanelLimit = maxPanelTemp - panelTempHysteresis;
 
@@ -364,9 +388,23 @@ void decisionTree() {
   }
 }
 //////////////////////////////////////////////////////////////////////////
+// Set a pump on or off, starting its hold time if that is a change
+void setPumpState(int i, int state) {
+  if (pumpStates[i] != state) {
+    pumpStates[i] = state;
+    pumpChangedTime[i] = millis();
+    pumpHeld[i] = true;
+  }
+}
+// True until pumpHoldTime has passed since the pump was last switched on or off
+bool pumpIsHeld(int i) {
+  if (pumpHeld[i] && millis() - pumpChangedTime[i] >= pumpHoldTime) pumpHeld[i] = false;
+  return pumpHeld[i];
+}
+//////////////////////////////////////////////////////////////////////////
 void switchWestOff() {
   Serial.println("Switch west off");
-  pumpStates[INDEX_PUMP_WEST] = DRIVE_PUMP_OFF;
+  setPumpState(INDEX_PUMP_WEST, DRIVE_PUMP_OFF);
 
   //close west flow valve
   digitalWrite(R0_8, LOW);
@@ -383,7 +421,7 @@ void switchWestOff() {
 /////////////////////////////////////////////////////////////////////////
 void switchEastOff() {
   Serial.println("Switch east off");
-  pumpStates[INDEX_PUMP_EAST] = DRIVE_PUMP_OFF;
+  setPumpState(INDEX_PUMP_EAST, DRIVE_PUMP_OFF);
 
   //close east flow valve
   digitalWrite(R0_4, LOW);
@@ -400,7 +438,7 @@ void switchEastOff() {
 /////////////////////////////////////////////////////////////////////////
 void coolWestRoof() {
   Serial.println("Cool panel west");
-  pumpStates[INDEX_PUMP_WEST] = DRIVE_PUMP_ON;
+  setPumpState(INDEX_PUMP_WEST, DRIVE_PUMP_ON);
   //open west flow valve
   digitalWrite(R0_8, HIGH);
 
@@ -416,7 +454,7 @@ void coolWestRoof() {
 /////////////////////////////////////////////////////////////////////////
 void coolEastRoof() {
   Serial.println("Cool panel east");
-  pumpStates[INDEX_PUMP_EAST] = DRIVE_PUMP_ON;
+  setPumpState(INDEX_PUMP_EAST, DRIVE_PUMP_ON);
   //open east flow valve
   digitalWrite(R0_4, HIGH);
 
@@ -433,7 +471,7 @@ void coolEastRoof() {
 //////////////////////////////////////////////////////////////////////////
 void heatPoolFromWest() {
   Serial.println("Heat pool from west");
-  pumpStates[INDEX_PUMP_WEST] = DRIVE_PUMP_ON;
+  setPumpState(INDEX_PUMP_WEST, DRIVE_PUMP_ON);
   //open west flow valve
   digitalWrite(R0_8, HIGH);
 
@@ -449,7 +487,7 @@ void heatPoolFromWest() {
 ///////////////////////////////////////////////////////////////////////////
 void heatPoolFromEast() {
   Serial.println("Heat pool from east");
-  pumpStates[INDEX_PUMP_EAST] = DRIVE_PUMP_ON;
+  setPumpState(INDEX_PUMP_EAST, DRIVE_PUMP_ON);
   //open east flow valve
   digitalWrite(R0_4, HIGH);
 
