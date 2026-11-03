@@ -69,7 +69,7 @@ Pressure transducers return a 32-bit float split across two input registers in a
 
 ### `decisionTree()`
 
-Runs every 5 s and is the whole control policy. It sets `pumpStates[]` (pushed to the inverters on the next Modbus write cycle) and drives the relays immediately, and records one of five `roofStates[]` per side: `LOW_SYST_PRES`, `POOL_TOO_HOT`, `COOL_ROOF`, `HEAT_POOL`, `AWAIT_SUNSHINE`. Low suction pressure is checked first and short-circuits both sides off — this is the dry-run protection that stops the pumps destroying themselves, so preserve that early return. West and east are then evaluated by duplicated blocks; changes to one almost always need mirroring in the other.
+Runs every 5 s and is the whole control policy. It sets `pumpStates[]` (pushed to the inverters on the next Modbus write cycle) and drives the relays immediately, and records one of five `roofStates[]` per side: `LOW_SYST_PRES`, `POOL_TOO_HOT`, `COOL_ROOF`, `HEAT_POOL`, `AWAIT_SUNSHINE`. Low suction pressure is checked first and short-circuits both sides off — this is the dry-run protection that stops the pumps destroying themselves, so preserve that early return. West and east are then evaluated by duplicated functions, `decideWest()` and `decideEast()`; changes to one almost always need mirroring in the other. Once a pump is switched on or off (`setPumpState()`), that side isn't re-evaluated for `pumpHoldTime` (45 s), so readings dithering around a limit can't flick the inverters on and off; only the low-pressure check overrides the hold.
 
 ### Relay/valve polarity
 
